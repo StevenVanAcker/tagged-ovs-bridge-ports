@@ -1,0 +1,33 @@
+---
+# create bridge-ports on an openvswitch and set tags
+#
+
+- name: install openvswitch
+  apt: pkg=openvswitch-switch
+
+- name: "create bridge {{ item.bridge }}"
+  openvswitch_bridge: bridge={{item.bridge}} state=present
+  with_items: ports
+
+- name: "[{{item.bridge}}.{{item.name}}] check if bridge-port exists"
+  command: ovs-vsctl get port {{ item.name }} name
+  register: portexists
+  changed_when: not portexists.stdout == "\"{{ item.name }}\""
+  failed_when: false
+  with_items: ports
+
+- name: "adding openvswitch port {{ item.item.name }} to {{ item.item.bridge }}"
+  command: ovs-vsctl add-br {{ item.item.name }} {{ item.item.bridge }} {{ item.item.tag }}
+  with_items: portexists.results
+  when: item.changed
+
+- name: "[{{item.bridge}}.{{item.name}}] check if port tag is set to {{ item.tag }}"
+  command: ovs-vsctl get port {{ item.name }} tag
+  register: tagexists
+  changed_when: not tagexists.stdout == "{{ item.tag }}"
+  with_items: ports
+
+- name: "[{{item.item.bridge}}.{{item.item.name}}] setting port tag to {{ item.item.tag }}"
+  command: ovs-vsctl set port {{ item.item.name }} tag={{ item.item.tag }}
+  with_items: tagexists.results
+  when: item.changed
